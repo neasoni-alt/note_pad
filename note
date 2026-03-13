@@ -1,0 +1,353 @@
+<!-- <!-- 4️⃣ Edit the Migration
+Open the migration file and change it to:
+public function up(): void
+{
+    Schema::create('books', function (Blueprint $table) {
+        $table->id();
+        $table->string('title');
+        $table->string('author');
+        $table->string('isbn')->unique();
+        $table->string('genre');
+        $table->integer('published_year');
+        $table->enum('status', ['available','checked_out','archived'])->default('available');
+        $table->timestamps();
+    });
+}
+
+app/Models/Book.php
+Add fillable fields:
+protected $fillable = [
+    'title',
+    'author',
+    'isbn',
+    'genre',
+    'published_year',
+    'status'
+];
+
+routes/web.php
+Add:
+use App\Http\Controllers\BookController;
+
+Route::resource('books', BookController::class);
+
+Route::get('/', function () {
+    return redirect()->route('books.index');
+});
+
+layout.blade.php
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Book Inventory</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-dark p-3">
+    <a class="navbar-brand text-white" href="{{ route('books.index') }}">
+        Book Inventory
+    </a>
+</nav>
+
+<div class="container mt-4">
+    @yield('content')
+</div>
+
+</body>
+</html>
+
+CONTROLLER
+
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Book;
+use Illuminate\Http\Request;
+
+class BookController extends Controller
+{
+    public function index()
+    {
+        $books = Book::latest()->paginate(10);
+        return view('books.index', compact('books'));
+    }
+
+    public function create()
+    {
+        return view('books.create');
+    }
+
+    public function store(Request $request)
+    {
+        $request->validate([
+            'title'=>'required|string|max:255',
+            'author'=>'required|string|max:255',
+            'isbn'=>'required|unique:books',
+            'genre'=>'required|string',
+            'published_year'=>'required|integer|min:1000|max:'.date('Y'),
+            'status'=>'required'
+        ]);
+
+        Book::create($request->all());
+
+        return redirect()->route('books.index')
+        ->with('success','Book created successfully');
+    }
+
+    public function show(Book $book)
+    {
+        return view('books.show',compact('book'));
+    }
+
+    public function edit(Book $book)
+    {
+        return view('books.edit',compact('book'));
+    }
+
+    public function update(Request $request, Book $book)
+    {
+        $request->validate([
+            'title'=>'required|string|max:255',
+            'author'=>'required|string|max:255',
+            'isbn'=>'required|unique:books,isbn,'.$book->id,
+            'genre'=>'required|string',
+            'published_year'=>'required|integer|min:1000|max:'.date('Y'),
+            'status'=>'required'
+        ]);
+
+        $book->update($request->all());
+
+        return redirect()->route('books.index')
+        ->with('success','Book updated successfully');
+    }
+
+    public function destroy(Book $book)
+    {
+        $book->delete();
+
+        return redirect()->route('books.index')
+        ->with('success','Book deleted successfully');
+    }
+}
+
+index.blade.php
+Create:
+resources/views/books/index.blade.php
+@extends('books.layout')
+
+@section('content')
+
+<div class="d-flex justify-content-between mb-3">
+<h2>Book List</h2>
+<a href="{{ route('books.create') }}" class="btn btn-primary">Add Book</a>
+</div>
+
+@if ($message = Session::get('success'))
+<div class="alert alert-success">{{ $message }}</div>
+@endif
+
+<table class="table table-bordered">
+<tr>
+<th>Title</th>
+<th>Author</th>
+<th>ISBN</th>
+<th>Genre</th>
+<th>Year</th>
+<th>Status</th>
+<th width="220px">Action</th>
+</tr>
+
+@forelse ($books as $book)
+<tr>
+<td>{{ $book->title }}</td>
+<td>{{ $book->author }}</td>
+<td>{{ $book->isbn }}</td>
+<td>{{ $book->genre }}</td>
+<td>{{ $book->published_year }}</td>
+<td>
+@if($book->status=='available')
+<span class="badge bg-success">Available</span>
+@elseif($book->status=='checked_out')
+<span class="badge bg-warning">Checked Out</span>
+@else
+<span class="badge bg-danger">Archived</span>
+@endif
+</td>
+
+<td>
+<a class="btn btn-info btn-sm" href="{{ route('books.show',$book->id) }}">Show</a>
+
+<a class="btn btn-primary btn-sm" href="{{ route('books.edit',$book->id) }}">Edit</a>
+
+<form action="{{ route('books.destroy',$book->id) }}" method="POST" style="display:inline">
+@csrf
+@method('DELETE')
+
+<button type="submit" class="btn btn-danger btn-sm">Delete</button>
+</form>
+
+</td>
+</tr>
+
+@empty
+<tr>
+<td colspan="7">No books found</td>
+</tr>
+@endforelse
+
+</table>
+
+{{ $books->links() }}
+
+@endsection
+
+create.blade.php
+resources/views/books/create.blade.php
+@extends('books.layout')
+
+@section('content')
+
+<h2>Add Book</h2>
+
+@if ($errors->any())
+<div class="alert alert-danger">
+<ul>
+@foreach ($errors->all() as $error)
+<li>{{ $error }}</li>
+@endforeach
+</ul>
+</div>
+@endif
+
+<form action="{{ route('books.store') }}" method="POST">
+@csrf
+
+<div class="mb-3">
+<label>Title</label>
+<input type="text" name="title" class="form-control" value="{{ old('title') }}">
+</div>
+
+<div class="mb-3">
+<label>Author</label>
+<input type="text" name="author" class="form-control" value="{{ old('author') }}">
+</div>
+
+<div class="mb-3">
+<label>ISBN</label>
+<input type="text" name="isbn" class="form-control" value="{{ old('isbn') }}">
+</div>
+
+<div class="mb-3">
+<label>Genre</label>
+<input type="text" name="genre" class="form-control" value="{{ old('genre') }}">
+</div>
+
+<div class="mb-3">
+<label>Published Year</label>
+<input type="number" name="published_year" class="form-control">
+</div>
+
+<div class="mb-3">
+<label>Status</label>
+<select name="status" class="form-control">
+<option value="available">Available</option>
+<option value="checked_out">Checked Out</option>
+<option value="archived">Archived</option>
+</select>
+</div>
+
+<button type="submit" class="btn btn-success">Submit</button>
+
+</form>
+
+@endsection
+________________________________________
+4️⃣ edit.blade.php
+resources/views/books/edit.blade.php
+@extends('books.layout')
+
+@section('content')
+
+<h2>Edit Book</h2>
+
+<form action="{{ route('books.update',$book->id) }}" method="POST">
+@csrf
+@method('PUT')
+
+<div class="mb-3">
+<label>Title</label>
+<input type="text" name="title" class="form-control" value="{{ $book->title }}">
+</div>
+
+<div class="mb-3">
+<label>Author</label>
+<input type="text" name="author" class="form-control" value="{{ $book->author }}">
+</div>
+
+<div class="mb-3">
+<label>ISBN</label>
+<input type="text" name="isbn" class="form-control" value="{{ $book->isbn }}">
+</div>
+
+<div class="mb-3">
+<label>Genre</label>
+<input type="text" name="genre" class="form-control" value="{{ $book->genre }}">
+</div>
+
+<div class="mb-3">
+<label>Published Year</label>
+<input type="number" name="published_year" value="{{ $book->published_year }}" class="form-control">
+</div>
+
+<div class="mb-3">
+<label>Status</label>
+<select name="status" class="form-control">
+
+<option value="available" {{ $book->status=='available' ? 'selected' : '' }}>Available</option>
+
+<option value="checked_out" {{ $book->status=='checked_out' ? 'selected' : '' }}>Checked Out</option>
+
+<option value="archived" {{ $book->status=='archived' ? 'selected' : '' }}>Archived</option>
+
+</select>
+</div>
+
+<button class="btn btn-success">Update</button>
+
+</form>
+
+@endsection
+________________________________________
+5️⃣ show.blade.php
+resources/views/books/show.blade.php
+@extends('books.layout')
+
+@section('content')
+
+<h2>Book Details</h2>
+
+<div class="card">
+<div class="card-body">
+
+<p><strong>Title:</strong> {{ $book->title }}</p>
+
+<p><strong>Author:</strong> {{ $book->author }}</p>
+
+<p><strong>ISBN:</strong> {{ $book->isbn }}</p>
+
+<p><strong>Genre:</strong> {{ $book->genre }}</p>
+
+<p><strong>Published Year:</strong> {{ $book->published_year }}</p>
+
+<p><strong>Status:</strong> {{ $book->status }}</p>
+
+<a href="{{ route('books.index') }}" class="btn btn-primary">Back</a>
+
+</div>
+</div>
+
+@endsection
+ -->
+<? -->
